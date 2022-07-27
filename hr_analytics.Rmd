@@ -1,0 +1,509 @@
+---
+title: "HR Analytics Hackathon"
+output: html_notebook
+---
+
+
+
+```{r}
+
+# Clear everything previously in environment
+rm(list = ls())
+
+```
+
+
+
+```{r}
+# Import datasets
+require(readr)
+
+train <- read_csv("train.csv")
+test <- read_csv('test.csv')
+
+# Get a feel of the data at hand
+head(train)
+head(test)
+
+```
+
+
+
+```{r}
+
+# Combine datasets for cleaning
+require(dplyr)
+master <- bind_rows(train, test)
+
+str(master)
+
+```
+
+
+
+```{r}
+#### ---- Data cleaning ---- ####
+
+# Avoid case mismatch possibility
+master <- mutate_if(master, is.character, tolower)
+
+master <- distinct(master)
+
+```
+
+
+
+
+
+```{r}
+# Check missing values
+colSums(is.na(master))
+
+```
+
+
+
+```{r}
+3443 / nrow(master) * 100
+
+5936 / nrow(master) * 100
+
+```
+
+
+
+
+```{r}
+# Blanks in education
+summary(as.factor(master$education))
+
+require(ggplot2)
+ggplot(master[1:54808,], aes(x = education, fill = as.factor(is_promoted))) + geom_bar(position = 'fill')
+
+```
+
+
+
+```{r}
+edu_gp <- group_by(train, education) %>% summarise(prom_perc = round(sum(is_promoted) / n() * 100, 2))
+
+edu_gp
+
+```
+
+
+
+```{r}
+# Lets keep it simple for now.
+master$education[which(is.na(master$education))] <- "below secondary"
+
+table(master$education)
+
+```
+
+
+
+
+
+
+
+
+```{r}
+# NA's in previous year rating
+summary(as.factor(master$previous_year_rating))
+
+# Check where previous_year_rating is NA
+df <- master[which(is.na(master$previous_year_rating)), ]
+
+table(df$length_of_service)
+
+```
+
+
+
+```{r}
+mean(master$previous_year_rating, na.rm = T)
+
+median(master$previous_year_rating, na.rm = T)
+
+```
+
+
+
+
+```{r}
+# We see that where previous_year_rating is NA, length_of_service is "1".
+# So NA's seem justified.
+require(ggplot2)
+
+ggplot(master[1:54808, ], aes(x = previous_year_rating, fill = as.factor(is_promoted))) + 
+  geom_bar(position = 'fill')
+# And it is significant!
+
+```
+
+
+
+```{r}
+master$previous_year_rating[which(is.na(master$previous_year_rating))] <- 'freshers'
+
+ggplot(master[1:54808, ], aes(x = previous_year_rating, fill = as.factor(is_promoted))) + 
+  geom_bar(position = 'fill')
+
+```
+
+
+```{r}
+str(master)
+```
+
+
+
+
+
+```{r}
+# Univariate / Bivariate Analysis ----
+
+# 1 employee_id
+n_distinct(master$employee_id) == nrow(master)
+
+```
+
+
+
+```{r}
+# 2 department
+
+ggplot(master, aes(x = department)) + 
+  geom_bar(fill = 'skyblue',color = 'black') + coord_flip()
+
+dept_df <- group_by(master, department) %>% 
+  summarise(dept_influence = round(sum(is_promoted, na.rm = T)/n()*100, 2)) %>%
+  arrange(dept_influence)
+
+dept_df
+
+```
+
+Is there departmental bias ???
+
+
+
+
+
+```{r}
+
+# 3 region
+
+ggplot(master, aes(x = region)) + 
+  geom_bar(fill = 'skyblue',color = 'black') + coord_flip()
+
+reg_df <- group_by(master, region) %>% 
+          summarise(reg_strength = n()) %>%
+          arrange(reg_strength)
+
+reg_df
+# Way too many categories in region. Pattern detection not possible.
+
+```
+
+
+
+```{r}
+master$region <- NULL
+
+```
+
+
+
+```{r}
+
+# 5 gender
+ggplot(master[!is.na(master$is_promoted),],aes(x = gender, fill =  gender)) + geom_bar() + coord_polar()
+
+
+ggplot(master[!is.na(master$is_promoted),], 
+       aes(x = gender, fill =  as.factor(is_promoted))) + 
+  geom_bar(position = 'fill')
+# Lesser female employees overall. But no apparent gender bias in promotions.
+
+
+```
+
+
+
+```{r}
+# 6 recruitment_channel
+
+channel_df <- group_by(master, recruitment_channel) %>% 
+  summarise(channel_influence = round(sum(is_promoted, na.rm = T)/n()*100, 2)) %>%
+  arrange(channel_influence)
+
+channel_df
+# Clearly, referred employees outdo others.
+
+
+```
+
+
+
+```{r}
+
+# 7 no_of_trainings
+
+# Check outliers
+plot(quantile(master$no_of_trainings, seq(0,1,0.01)))
+quantile(master$no_of_trainings, seq(0,1,0.01))
+
+master$no_of_trainings[master$no_of_trainings > 4] <- 4
+
+
+```
+
+
+
+```{r}
+require(ggplot2)
+ggplot(master[!is.na(master$is_promoted),], aes(x = no_of_trainings, fill = as.factor(is_promoted))) +
+  geom_bar(position = 'fill')
+
+# More the no of trainings required, lesser the chance of promotion.
+
+```
+
+
+
+
+```{r}
+
+# 8 Age
+
+# Check outliers
+plot(quantile(master$age, seq(0,1,0.01)))
+# No outliers
+
+ggplot(train, aes(x = age, fill = as.factor(is_promoted))) + 
+  geom_histogram(binwidth = 10, color = 'black', position = 'fill')
+
+```
+
+
+
+```{r}
+
+# 10 length_of_service
+
+# Check outliers
+plot(quantile(master$length_of_service, seq(0,1,0.01)))
+quantile(master$length_of_service, seq(0,1,0.01))
+
+master$length_of_service[master$length_of_service > 20] <- 20
+
+
+```
+
+
+
+```{r}
+ggplot(master[!is.na(master$is_promoted),], 
+       aes(x = length_of_service, 
+           fill = as.factor(is_promoted))) + 
+  geom_histogram(binwidth = 5, position = 'fill',color = 'black')
+
+
+```
+
+
+
+```{r}
+
+
+# 11 KPIs_met>80%
+
+ggplot(master[!is.na(master$is_promoted),], 
+       aes(x = `KPIs_met >80%`, fill = as.factor(is_promoted))) + 
+  geom_bar(position = 'fill',color = 'black')
+
+# Clearly, meeting KPI matters for promotion
+
+
+```
+
+
+
+```{r}
+
+# 12 awards_won?
+
+ggplot(master[!is.na(master$is_promoted),], 
+       aes(x = `awards_won?`, fill = as.factor(is_promoted))) + 
+  geom_bar(position = 'fill',color = 'black')
+
+# It highly impacts chances of promotion.
+
+
+
+```
+
+
+
+```{r}
+# 13 avg_training_score
+plot(quantile(master$avg_training_score, seq(0,1,0.01)))
+quantile(master$avg_training_score, seq(0,1,0.01))
+
+master$avg_training_score[master$avg_training_score > 91] <- 91
+master$avg_training_score[master$avg_training_score < 44] <- 44
+
+```
+
+
+```{r}
+
+
+ggplot(master[!is.na(master$is_promoted),], 
+       aes(x = avg_training_score, 
+           fill = as.factor(is_promoted))) + 
+  geom_histogram(binwidth = 10, position = 'fill',color = 'black')
+
+
+
+```
+
+
+
+Feature Engineering ----
+
+```{r}
+# Creating some new metrics which may help in prediction.
+
+# total training score of employees
+master$tot_training_score <- master$no_of_trainings * master$avg_training_score
+
+# Age of employee when joined company
+master$start_time_age <- master$age - master$length_of_service
+
+```
+
+
+
+```{r}
+
+# Lets normalize continuous variables.
+master[ , c(6,7,9,12,14,15)] <- sapply(master[ , c(6,7,9,12,14,15)], scale)
+
+glimpse(master) 
+
+# EDA Complete...
+
+```
+
+
+
+```{r}
+
+rm(channel_df, dept_df, df, edu_gp, reg_df, train, test)
+
+require(dummies)
+
+master <- dummy.data.frame(as.data.frame(master))
+
+```
+
+
+
+
+```{r}
+
+train <- master[which(!is.na(master$is_promoted)),]
+
+tst.data <- master[which(is.na(master$is_promoted)),]
+
+require(caTools)
+set.seed(999)
+index <- sample.split(train$is_promoted, SplitRatio = 0.75)
+
+trn.data <- train[index, ]
+val.data <- train[!index, ]
+
+```
+
+EDA Complete !
+
+
+
+
+```{r}
+
+# Balancing the classes by SMOTE
+require(smotefamily)
+
+set.seed(100)
+
+trn.smote <- SMOTE(trn.data[,-c(1,31)], trn.data$is_promoted )
+
+
+```
+
+
+
+
+Classes are well balanced as compared to orig. data.
+
+```{r}
+trn.data <- trn.smote$data
+
+str(trn.data)
+
+```
+
+
+
+```{r}
+names(trn.data)[32] <- 'is_promoted'
+
+```
+
+
+
+```{r}
+table(trn.data$is_promoted)
+
+
+```
+
+
+
+
+```{r}
+trn.data$is_promoted <- as.integer(trn.data$is_promoted)
+```
+
+
+
+
+Model Building ----
+
+
+
+1. Logistic Regression ----
+
+```{r}
+model_1 <- glm(is_promoted ~ ., data = trn.data, family = 'binomial')
+
+summary(model_1)
+
+
+```
+
+
+
+Step-wise reduction
+
+```{r}
+model_2 <- step(model_1)
+
+summary(model_2)
+
+```
+
